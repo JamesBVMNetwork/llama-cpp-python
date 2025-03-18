@@ -183,17 +183,17 @@ def clip_get_load_image_size(ctx_clip: clip_ctx_p, /) -> "_Pointer[clip_image_si
     ...
 
 @ctypes_function("clip_image_size_init", [], POINTER(clip_image_size))
-def clip_image_size_init(/) -> "_Pointer[clip_image_size]":
+def clip_image_size_init() -> "_Pointer[clip_image_size]":
     """Initialize a clip_image_size structure."""
     ...
 
 @ctypes_function("clip_image_u8_init", [], POINTER(clip_image_u8))
-def clip_image_u8_init(/) -> "_Pointer[clip_image_u8]":
+def clip_image_u8_init() -> "_Pointer[clip_image_u8]":
     """Initialize a clip_image_u8 structure."""
     ...
 
 @ctypes_function("clip_image_f32_init", [], POINTER(clip_image_f32))
-def clip_image_f32_init(/) -> "_Pointer[clip_image_f32]":
+def clip_image_f32_init() -> "_Pointer[clip_image_f32]":
     """Initialize a clip_image_f32 structure."""
     ...
 
