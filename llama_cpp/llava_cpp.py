@@ -5,15 +5,12 @@ from ctypes import (
     c_bool,
     c_char_p,
     c_int,
-    c_int32,  # Added for int32_t
     c_uint8,
     c_float,
     c_void_p,
-    c_size_t,  # Added for size_t
     POINTER,
-    _Pointer,
+    _Pointer,  # type: ignore
     Structure,
-    byref,    # Added for pointer passing
 )
 import pathlib
 from typing import (
@@ -21,7 +18,6 @@ from typing import (
     NewType,
     Optional,
     TYPE_CHECKING,
-    List,     # Added for array returns
 )
 
 import llama_cpp.llama_cpp as llama_cpp
@@ -36,248 +32,385 @@ if TYPE_CHECKING:
         CtypesArray,
     )
 
-# Library loading remains unchanged
+
+# Specify the base name of the shared library to load
 _libllava_base_name = "llava"
 _libllava_override_path = os.environ.get("LLAVA_CPP_LIB")
 _libllava_base_path = pathlib.Path(os.path.abspath(os.path.dirname(__file__))) / "lib" if _libllava_override_path is None else pathlib.Path()
+
+# Load the library
 _libllava = load_shared_library(_libllava_base_name, _libllava_base_path)
 
 ctypes_function = ctypes_function_for_shared_library(_libllava)
 
-# Existing llava.h bindings remain unchanged (omitted for brevity)
-# ...
+
+################################################
+# llava.h
+################################################
+
+# struct clip_ctx;
+clip_ctx_p = NewType("clip_ctx_p", int)
+clip_ctx_p_ctypes = c_void_p
+
+
+# struct llava_image_embed {
+#     float * embed;
+#     int n_image_pos;
+# };
+class llava_image_embed(Structure):
+    _fields_ = [
+        ("embed", POINTER(c_float)),
+        ("n_image_pos", c_int),
+    ]
+
+
+# /** sanity check for clip <-> llava embed size match */
+# LLAVA_API bool llava_validate_embed_size(const llama_context * ctx_llama, const clip_ctx * ctx_clip);
+@ctypes_function(
+    "llava_validate_embed_size",
+    [llama_cpp.llama_context_p_ctypes, clip_ctx_p_ctypes],
+    c_bool,
+)
+def llava_validate_embed_size(
+    ctx_llama: llama_cpp.llama_context_p, ctx_clip: clip_ctx_p, /
+) -> bool:
+    ...
+
+
+# /** build an image embed from image file bytes */
+# LLAVA_API struct llava_image_embed * llava_image_embed_make_with_bytes(struct clip_ctx * ctx_clip, int n_threads, const unsigned char * image_bytes, int image_bytes_length);
+@ctypes_function(
+    "llava_image_embed_make_with_bytes",
+    [clip_ctx_p_ctypes, c_int, POINTER(c_uint8), c_int],
+    POINTER(llava_image_embed),
+)
+def llava_image_embed_make_with_bytes(
+    ctx_clip: clip_ctx_p,
+    n_threads: Union[c_int, int],
+    image_bytes: CtypesArray[c_uint8],
+    image_bytes_length: Union[c_int, int],
+    /,
+) -> "_Pointer[llava_image_embed]":
+    ...
+
+
+# /** build an image embed from a path to an image filename */
+# LLAVA_API struct llava_image_embed * llava_image_embed_make_with_filename(struct clip_ctx * ctx_clip, int n_threads, const char * image_path);
+@ctypes_function(
+    "llava_image_embed_make_with_filename",
+    [clip_ctx_p_ctypes, c_int, c_char_p],
+    POINTER(llava_image_embed),
+)
+def llava_image_embed_make_with_filename(
+    ctx_clip: clip_ctx_p, n_threads: Union[c_int, int], image_path: bytes, /
+) -> "_Pointer[llava_image_embed]":
+    ...
+
+
+# LLAVA_API void llava_image_embed_free(struct llava_image_embed * embed);
+# /** free an embedding made with llava_image_embed_make_* */
+@ctypes_function("llava_image_embed_free", [POINTER(llava_image_embed)], None)
+def llava_image_embed_free(embed: "_Pointer[llava_image_embed]", /):
+    ...
+
+
+# /** write the image represented by embed into the llama context with batch size n_batch, starting at context pos n_past. on completion, n_past points to the next position in the context after the image embed. */
+# LLAVA_API bool llava_eval_image_embed(struct llama_context * ctx_llama, const struct llava_image_embed * embed, int n_batch, int * n_past);
+@ctypes_function(
+    "llava_eval_image_embed",
+    [
+        llama_cpp.llama_context_p_ctypes,
+        POINTER(llava_image_embed),
+        c_int,
+        POINTER(c_int),
+    ],
+    c_bool,
+)
+def llava_eval_image_embed(
+    ctx_llama: llama_cpp.llama_context_p,
+    embed: "_Pointer[llava_image_embed]",
+    n_batch: Union[c_int, int],
+    n_past: "_Pointer[c_int]",
+    /,
+) -> bool:
+    ...
+
 
 ################################################
 # clip.h
 ################################################
 
-# Type definitions
-clip_ctx_p = NewType("clip_ctx_p", int)
-clip_ctx_p_ctypes = c_void_p
 
-# New structures
-class clip_context_params(Structure):
-    _fields_ = [
-        ("use_gpu", c_bool),
-        ("verbosity", c_int),
-    ]
+import ctypes
+from typing import Optional, Union
 
-class clip_image_size(Structure):
+# Placeholder for ctypes_function decorator (assumed from original code)
+def ctypes_function(name, argtypes, restype):
+    def decorator(func):
+        # Normally sets up ctypes.CFUNCTYPE and library loading
+        return func
+    return decorator
+
+# Type aliases for clarity
+clip_ctx_p = ctypes.c_void_p  # Pointer to clip_ctx (opaque struct)
+c_char_p = ctypes.c_char_p
+c_int = ctypes.c_int
+c_bool = ctypes.c_bool
+c_size_t = ctypes.c_size_t
+c_int32 = ctypes.c_int32
+c_float_p = ctypes.POINTER(ctypes.c_float)
+c_uchar_p = ctypes.POINTER(ctypes.c_ubyte)
+
+# Struct definitions
+class clip_image_size(ctypes.Structure):
     _fields_ = [
         ("width", c_int),
         ("height", c_int),
     ]
 
-# Opaque structures (fields not exposed in clip.h)
-class clip_image_u8(Structure):
-    pass
+clip_image_size_p = ctypes.POINTER(clip_image_size)
 
-class clip_image_f32(Structure):
-    pass
-
-class clip_image_u8_batch(Structure):
+class clip_image_u8_batch(ctypes.Structure):
     _fields_ = [
-        ("data", POINTER(clip_image_u8)),
+        ("data", ctypes.c_void_p),  # Pointer to clip_image_u8 (opaque)
         ("size", c_size_t),
     ]
 
-class clip_image_f32_batch(Structure):
+class clip_image_f32_batch(ctypes.Structure):
     _fields_ = [
-        ("data", POINTER(clip_image_f32)),
+        ("data", ctypes.c_void_p),  # Pointer to clip_image_f32 (opaque)
         ("size", c_size_t),
     ]
 
-# Existing function: clip_model_load (kept for compatibility, marked deprecated)
-@ctypes_function("clip_model_load", [c_char_p, c_int], clip_ctx_p_ctypes)
+class clip_context_params(ctypes.Structure):
+    _fields_ = [
+        ("use_gpu", c_bool),
+        ("verbosity", c_int),
+    ]
+
+# Opaque struct pointers
+clip_image_u8_p = ctypes.c_void_p  # clip_image_u8 is opaque
+clip_image_f32_p = ctypes.c_void_p  # clip_image_f32 is opaque
+clip_ggml_tensor_p = ctypes.c_void_p  # ggml_tensor is opaque
+
+# Deprecated clip_model_load
+@ctypes_function("clip_model_load", [c_char_p, c_int], clip_ctx_p)
 def clip_model_load(fname: bytes, verbosity: Union[c_int, int], /) -> Optional[clip_ctx_p]:
-    """Load a CLIP model (deprecated, use clip_init instead)."""
-    ...
+    """Deprecated: Load a CLIP model (use clip_init instead)."""
+    pass
 
-# New function: clip_init
-@ctypes_function("clip_init", [c_char_p, clip_context_params], clip_ctx_p_ctypes)
+# clip_init
+@ctypes_function("clip_init", [c_char_p, clip_context_params], clip_ctx_p)
 def clip_init(fname: bytes, ctx_params: clip_context_params, /) -> Optional[clip_ctx_p]:
-    """Initialize a CLIP context with parameters."""
-    ...
+    """Initialize a CLIP context from a model file."""
+    pass
 
-# Existing function: clip_free
-@ctypes_function("clip_free", [clip_ctx_p_ctypes], None)
-def clip_free(ctx: clip_ctx_p, /):
+# clip_free
+@ctypes_function("clip_free", [clip_ctx_p], None)
+def clip_free(ctx: clip_ctx_p, /) -> None:
     """Free a CLIP context."""
-    ...
+    pass
 
-# New functions
-@ctypes_function("clip_embd_nbytes", [clip_ctx_p_ctypes], c_size_t)
+# clip_embd_nbytes
+@ctypes_function("clip_embd_nbytes", [clip_ctx_p], c_size_t)
 def clip_embd_nbytes(ctx: clip_ctx_p, /) -> int:
-    """Get the number of bytes in the embedding."""
-    ...
+    """Get the size of embeddings in bytes."""
+    pass
 
-@ctypes_function("clip_embd_nbytes_by_img", [clip_ctx_p_ctypes, c_int, c_int], c_size_t)
+# clip_embd_nbytes_by_img
+@ctypes_function("clip_embd_nbytes_by_img", [clip_ctx_p, c_int, c_int], c_size_t)
 def clip_embd_nbytes_by_img(ctx: clip_ctx_p, img_h: int, img_w: int, /) -> int:
-    """Get the number of bytes in the embedding for an image of given height and width."""
-    ...
+    """Get the size of embeddings in bytes for an image of given height and width."""
+    pass
 
-@ctypes_function("clip_image_size", [clip_ctx_p_ctypes], c_int32)
+# clip_image_size
+@ctypes_function("clip_image_size", [clip_ctx_p], c_int32)
 def clip_image_size(ctx: clip_ctx_p, /) -> int:
     """Get the image size."""
-    ...
+    pass
 
-@ctypes_function("clip_patch_size", [clip_ctx_p_ctypes], c_int32)
+# clip_patch_size
+@ctypes_function("clip_patch_size", [clip_ctx_p], c_int32)
 def clip_patch_size(ctx: clip_ctx_p, /) -> int:
     """Get the patch size."""
-    ...
+    pass
 
-@ctypes_function("clip_hidden_size", [clip_ctx_p_ctypes], c_int32)
+# clip_hidden_size
+@ctypes_function("clip_hidden_size", [clip_ctx_p], c_int32)
 def clip_hidden_size(ctx: clip_ctx_p, /) -> int:
     """Get the hidden size."""
-    ...
+    pass
 
-@ctypes_function("clip_patch_merge_type", [clip_ctx_p_ctypes], c_char_p)
+# clip_patch_merge_type
+@ctypes_function("clip_patch_merge_type", [clip_ctx_p], c_char_p)
 def clip_patch_merge_type(ctx: clip_ctx_p, /) -> bytes:
-    """Get the patch merge type as bytes."""
-    ...
+    """Get the patch merge type as a string (returns bytes)."""
+    pass
 
-@ctypes_function("clip_image_grid", [clip_ctx_p_ctypes], POINTER(c_int32))
-def clip_image_grid(ctx: clip_ctx_p, /) -> "_Pointer[c_int32]":
-    """Get a pointer to the image grid array."""
-    ...
+# clip_image_grid
+@ctypes_function("clip_image_grid", [clip_ctx_p], ctypes.POINTER(c_int32))
+def clip_image_grid(ctx: clip_ctx_p, /) -> ctypes.POINTER(c_int32):
+    """Get the image grid as a pointer to int32."""
+    pass
 
-@ctypes_function("get_clip_image_grid_size", [clip_ctx_p_ctypes], c_size_t)
+# get_clip_image_grid_size
+@ctypes_function("get_clip_image_grid_size", [clip_ctx_p], c_size_t)
 def get_clip_image_grid_size(ctx: clip_ctx_p, /) -> int:
     """Get the size of the image grid."""
-    ...
+    pass
 
-def get_clip_image_grid(ctx: clip_ctx_p, /) -> List[int]:
-    """Get the image grid as a list."""
-    size = get_clip_image_grid_size(ctx)
-    grid_ptr = clip_image_grid(ctx)
-    return [grid_ptr[i] for i in range(size)]
-
-@ctypes_function("clip_n_patches", [clip_ctx_p_ctypes], c_int)
+# clip_n_patches
+@ctypes_function("clip_n_patches", [clip_ctx_p], c_int)
 def clip_n_patches(ctx: clip_ctx_p, /) -> int:
     """Get the number of patches."""
-    ...
+    pass
 
-@ctypes_function("clip_n_patches_by_img", [clip_ctx_p_ctypes, POINTER(clip_image_f32)], c_int)
-def clip_n_patches_by_img(ctx: clip_ctx_p, img: "_Pointer[clip_image_f32]", /) -> int:
+# clip_n_patches_by_img
+@ctypes_function("clip_n_patches_by_img", [clip_ctx_p, clip_image_f32_p], c_int)
+def clip_n_patches_by_img(ctx: clip_ctx_p, img: clip_image_f32_p, /) -> int:
     """Get the number of patches for a given image."""
-    ...
+    pass
 
-@ctypes_function("clip_n_mmproj_embd", [clip_ctx_p_ctypes], c_int)
+# clip_n_mmproj_embd
+@ctypes_function("clip_n_mmproj_embd", [clip_ctx_p], c_int)
 def clip_n_mmproj_embd(ctx: clip_ctx_p, /) -> int:
     """Get the number of multimodal projection embeddings."""
-    ...
+    pass
 
-@ctypes_function("clip_uhd_num_image_embeds_col", [clip_ctx_p_ctypes], c_int)
-def clip_uhd_num_image_embeds_col(ctx_clip: clip_ctx_p, /) -> int:
+# clip_uhd_num_image_embeds_col
+@ctypes_function("clip_uhd_num_image_embeds_col", [clip_ctx_p], c_int)
+def clip_uhd_num_image_embeds_col(ctx: clip_ctx_p, /) -> int:
     """Get the number of UHD image embeds per column."""
-    ...
+    pass
 
-@ctypes_function("clip_add_load_image_size", [clip_ctx_p_ctypes, POINTER(clip_image_size)], None)
-def clip_add_load_image_size(ctx_clip: clip_ctx_p, load_image_size: "_Pointer[clip_image_size]", /):
-    """Add a load image size to the context."""
-    ...
+# clip_add_load_image_size
+@ctypes_function("clip_add_load_image_size", [clip_ctx_p, ctypes.POINTER(clip_image_size)], None)
+def clip_add_load_image_size(ctx: clip_ctx_p, load_image_size: clip_image_size_p, /) -> None:
+    """Add load image size to the context."""
+    pass
 
-@ctypes_function("clip_get_load_image_size", [clip_ctx_p_ctypes], POINTER(clip_image_size))
-def clip_get_load_image_size(ctx_clip: clip_ctx_p, /) -> "_Pointer[clip_image_size]":
+# clip_get_load_image_size
+@ctypes_function("clip_get_load_image_size", [clip_ctx_p], clip_image_size_p)
+def clip_get_load_image_size(ctx: clip_ctx_p, /) -> clip_image_size_p:
     """Get the load image size from the context."""
-    ...
+    pass
 
-@ctypes_function("clip_image_size_init", [], POINTER(clip_image_size))
-def clip_image_size_init() -> "_Pointer[clip_image_size]":
-    """Initialize a clip_image_size structure."""
-    ...
+# clip_image_size_init
+@ctypes_function("clip_image_size_init", [], clip_image_size_p)
+def clip_image_size_init() -> clip_image_size_p:
+    """Initialize a clip_image_size struct."""
+    pass
 
-@ctypes_function("clip_image_u8_init", [], POINTER(clip_image_u8))
-def clip_image_u8_init() -> "_Pointer[clip_image_u8]":
-    """Initialize a clip_image_u8 structure."""
-    ...
+# clip_image_u8_init
+@ctypes_function("clip_image_u8_init", [], clip_image_u8_p)
+def clip_image_u8_init() -> clip_image_u8_p:
+    """Initialize a clip_image_u8 struct."""
+    pass
 
-@ctypes_function("clip_image_f32_init", [], POINTER(clip_image_f32))
-def clip_image_f32_init() -> "_Pointer[clip_image_f32]":
-    """Initialize a clip_image_f32 structure."""
-    ...
+# clip_image_f32_init
+@ctypes_function("clip_image_f32_init", [], clip_image_f32_p)
+def clip_image_f32_init() -> clip_image_f32_p:
+    """Initialize a clip_image_f32 struct."""
+    pass
 
-@ctypes_function("clip_image_u8_free", [POINTER(clip_image_u8)], None)
-def clip_image_u8_free(img: "_Pointer[clip_image_u8]", /):
-    """Free a clip_image_u8 structure."""
-    ...
+# clip_image_u8_free
+@ctypes_function("clip_image_u8_free", [clip_image_u8_p], None)
+def clip_image_u8_free(img: clip_image_u8_p, /) -> None:
+    """Free a clip_image_u8 struct."""
+    pass
 
-@ctypes_function("clip_image_f32_free", [POINTER(clip_image_f32)], None)
-def clip_image_f32_free(img: "_Pointer[clip_image_f32]", /):
-    """Free a clip_image_f32 structure."""
-    ...
+# clip_image_f32_free
+@ctypes_function("clip_image_f32_free", [clip_image_f32_p], None)
+def clip_image_f32_free(img: clip_image_f32_p, /) -> None:
+    """Free a clip_image_f32 struct."""
+    pass
 
-@ctypes_function("clip_image_u8_batch_free", [POINTER(clip_image_u8_batch)], None)
-def clip_image_u8_batch_free(batch: "_Pointer[clip_image_u8_batch]", /):
-    """Free a clip_image_u8_batch structure."""
-    ...
+# clip_image_u8_batch_free
+@ctypes_function("clip_image_u8_batch_free", [ctypes.POINTER(clip_image_u8_batch)], None)
+def clip_image_u8_batch_free(batch: ctypes.POINTER(clip_image_u8_batch), /) -> None:
+    """Free a clip_image_u8_batch struct."""
+    pass
 
-@ctypes_function("clip_image_f32_batch_free", [POINTER(clip_image_f32_batch)], None)
-def clip_image_f32_batch_free(batch: "_Pointer[clip_image_f32_batch]", /):
-    """Free a clip_image_f32_batch structure."""
-    ...
+# clip_image_f32_batch_free
+@ctypes_function("clip_image_f32_batch_free", [ctypes.POINTER(clip_image_f32_batch)], None)
+def clip_image_f32_batch_free(batch: ctypes.POINTER(clip_image_f32_batch), /) -> None:
+    """Free a clip_image_f32_batch struct."""
+    pass
 
-@ctypes_function("clip_build_img_from_pixels", [POINTER(c_uint8), c_int, c_int, POINTER(clip_image_u8)], None)
-def clip_build_img_from_pixels(rgb_pixels: "CtypesArray[c_uint8]", nx: int, ny: int, img: "_Pointer[clip_image_u8]", /):
+# clip_build_img_from_pixels
+@ctypes_function("clip_build_img_from_pixels", [c_uchar_p, c_int, c_int, clip_image_u8_p], None)
+def clip_build_img_from_pixels(rgb_pixels: c_uchar_p, nx: int, ny: int, img: clip_image_u8_p, /) -> None:
     """Build an image from RGB pixels."""
-    ...
+    pass
 
-@ctypes_function("clip_image_load_from_file", [c_char_p, POINTER(clip_image_u8)], c_bool)
-def clip_image_load_from_file(fname: bytes, img: "_Pointer[clip_image_u8]", /) -> bool:
-    """Load an image from a file into a clip_image_u8 structure."""
-    ...
+# clip_image_load_from_file
+@ctypes_function("clip_image_load_from_file", [c_char_p, clip_image_u8_p], c_bool)
+def clip_image_load_from_file(fname: bytes, img: clip_image_u8_p, /) -> bool:
+    """Load an image from a file into a clip_image_u8 struct."""
+    pass
 
-@ctypes_function("clip_image_load_from_bytes", [POINTER(c_uint8), c_size_t, POINTER(clip_image_u8)], c_bool)
-def clip_image_load_from_bytes(bytes: "CtypesArray[c_uint8]", bytes_length: int, img: "_Pointer[clip_image_u8]", /) -> bool:
-    """Load an image from bytes into a clip_image_u8 structure."""
-    ...
+# clip_image_load_from_bytes
+@ctypes_function("clip_image_load_from_bytes", [c_uchar_p, c_size_t, clip_image_u8_p], c_bool)
+def clip_image_load_from_bytes(bytes_data: c_uchar_p, bytes_length: int, img: clip_image_u8_p, /) -> bool:
+    """Load an image from bytes into a clip_image_u8 struct."""
+    pass
 
-@ctypes_function("clip_image_preprocess", [clip_ctx_p_ctypes, POINTER(clip_image_u8), POINTER(clip_image_f32_batch)], c_bool)
-def clip_image_preprocess(ctx: clip_ctx_p, img: "_Pointer[clip_image_u8]", res_imgs: "_Pointer[clip_image_f32_batch]", /) -> bool:
-    """Preprocess an image and store results in a batch."""
-    ...
+# clip_image_preprocess
+@ctypes_function("clip_image_preprocess", [clip_ctx_p, clip_image_u8_p, ctypes.POINTER(clip_image_f32_batch)], c_bool)
+def clip_image_preprocess(ctx: clip_ctx_p, img: clip_image_u8_p, res_imgs: ctypes.POINTER(clip_image_f32_batch), /) -> bool:
+    """Preprocess an image and store results in a clip_image_f32_batch."""
+    pass
 
-@ctypes_function("clip_get_newline_tensor", [clip_ctx_p_ctypes], c_void_p)  # Assuming ggml_tensor * as c_void_p
-def clip_get_newline_tensor(ctx: clip_ctx_p, /) -> c_void_p:
+# clip_get_newline_tensor
+@ctypes_function("clip_get_newline_tensor", [clip_ctx_p], clip_ggml_tensor_p)
+def clip_get_newline_tensor(ctx: clip_ctx_p, /) -> clip_ggml_tensor_p:
     """Get the newline tensor."""
-    ...
+    pass
 
-@ctypes_function("clip_image_encode", [clip_ctx_p_ctypes, c_int, POINTER(clip_image_f32), POINTER(c_float)], c_bool)
-def clip_image_encode(ctx: clip_ctx_p, n_threads: int, img: "_Pointer[clip_image_f32]", vec: "_Pointer[c_float]", /) -> bool:
+# clip_image_encode
+@ctypes_function("clip_image_encode", [clip_ctx_p, c_int, clip_image_f32_p, c_float_p], c_bool)
+def clip_image_encode(ctx: clip_ctx_p, n_threads: int, img: clip_image_f32_p, vec: c_float_p, /) -> bool:
     """Encode an image into a float vector."""
-    ...
+    pass
 
-@ctypes_function("clip_image_batch_encode", [clip_ctx_p_ctypes, c_int, POINTER(clip_image_f32_batch), POINTER(c_float)], c_bool)
-def clip_image_batch_encode(ctx: clip_ctx_p, n_threads: int, imgs: "_Pointer[clip_image_f32_batch]", vec: "_Pointer[c_float]", /) -> bool:
+# clip_image_batch_encode
+@ctypes_function("clip_image_batch_encode", [clip_ctx_p, c_int, ctypes.POINTER(clip_image_f32_batch), c_float_p], c_bool)
+def clip_image_batch_encode(ctx: clip_ctx_p, n_threads: int, imgs: ctypes.POINTER(clip_image_f32_batch), vec: c_float_p, /) -> bool:
     """Encode a batch of images into a float vector."""
-    ...
+    pass
 
+# clip_model_quantize
 @ctypes_function("clip_model_quantize", [c_char_p, c_char_p, c_int], c_bool)
 def clip_model_quantize(fname_inp: bytes, fname_out: bytes, itype: int, /) -> bool:
     """Quantize a CLIP model."""
-    ...
+    pass
 
-@ctypes_function("clip_is_minicpmv", [clip_ctx_p_ctypes], c_int)
+# clip_is_minicpmv
+@ctypes_function("clip_is_minicpmv", [clip_ctx_p], c_int)
 def clip_is_minicpmv(ctx: clip_ctx_p, /) -> int:
-    """Check if the model is MiniCPM-V."""
-    ...
+    """Check if the model is MiniCPMV."""
+    pass
 
-@ctypes_function("clip_is_glm", [clip_ctx_p_ctypes], c_bool)
+# clip_is_glm
+@ctypes_function("clip_is_glm", [clip_ctx_p], c_bool)
 def clip_is_glm(ctx: clip_ctx_p, /) -> bool:
     """Check if the model is GLM."""
-    ...
+    pass
 
-@ctypes_function("clip_is_qwen2vl", [clip_ctx_p_ctypes], c_bool)
+# clip_is_qwen2vl
+@ctypes_function("clip_is_qwen2vl", [clip_ctx_p], c_bool)
 def clip_is_qwen2vl(ctx: clip_ctx_p, /) -> bool:
-    """Check if the model is Qwen2-VL."""
-    ...
+    """Check if the model is Qwen2VL."""
+    pass
 
-@ctypes_function("get_deepest_feature_layer", [clip_ctx_p_ctypes], c_int)
+# get_deepest_feature_layer
+@ctypes_function("get_deepest_feature_layer", [clip_ctx_p], c_int)
 def get_deepest_feature_layer(ctx: clip_ctx_p, /) -> int:
     """Get the deepest feature layer."""
-    ...
+    pass
 
-@ctypes_function("clip_encode_float_image", [clip_ctx_p_ctypes, c_int, POINTER(c_float), c_int, c_int, POINTER(c_float)], c_bool)
-def clip_encode_float_image(ctx: clip_ctx_p, n_threads: int, img: "_Pointer[c_float]", h: int, w: int, vec: "_Pointer[c_float]", /) -> bool:
+# clip_encode_float_image
+@ctypes_function("clip_encode_float_image", [clip_ctx_p, c_int, c_float_p, c_int, c_int, c_float_p], c_bool)
+def clip_encode_float_image(ctx: clip_ctx_p, n_threads: int, img: c_float_p, h: int, w: int, vec: c_float_p, /) -> bool:
     """Encode a float image into a vector."""
-    ...
+    pass
